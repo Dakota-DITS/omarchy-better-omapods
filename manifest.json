@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "ddewolfe.better-omapods",
+  "name": "Better Omapods",
+  "version": "1.4.0",
+  "author": "Dakota DeWolfe",
+  "license": "MIT",
+  "homepage": "https://github.com/Dakota-DITS/omarchy-better-omapods",
+  "description": "Common earbuds in the Omarchy bar: Soundcore and AirPods with ANC, plus battery and Find for other Bluetooth headphones.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Better Omapods",
+    "description": "Battery, ANC, find-tone, and touch controls for Soundcore, AirPods, and other Bluetooth headphones.",
+    "category": "Audio",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "hideWhenDisconnected": true
+    },
+    "schema": [
+      {
+        "key": "hideWhenDisconnected",
+        "type": "boolean",
+        "label": "Hide the icon when no headphones are connected",
+        "defaultValue": true
+      },
+      {
+        "key": "icon",
+        "type": "enum",
+        "label": "Bar icon",
+        "options": ["Auto", "Earbuds", "Over-ear"],
+        "defaultValue": "Auto",
+        "description": "Auto follows the connected device. Earbuds is the AirPods Pro silhouette omapods uses; Over-ear is the Max cups."
+      }
+    ]
+  }
+}

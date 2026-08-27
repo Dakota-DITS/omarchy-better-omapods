@@ -1,0 +1,14 @@
+[Unit]
+Description=Better Omapods status bridge for the Omarchy bar
+After=bluetooth.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.config/omarchy/plugins/ddewolfe.better-omapods/bridge.py
+Restart=always
+RestartSec=3
+Environment=PATH=%h/.local/bin:/usr/bin
+
+[Install]
+WantedBy=graphical-session.target

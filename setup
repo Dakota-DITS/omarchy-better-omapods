@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")" && pwd)"
+bin="${HOME}/.local/bin/openscq30"
+
+if ! command -v openscq30 >/dev/null 2>&1 && [[ ! -x "$bin" ]]; then
+  echo "OpenSCQ30 is not on PATH (needed for Soundcore)."
+  echo "Install it from https://github.com/Oppzippy/OpenSCQ30."
+fi
+if ! command -v librepods-ctl >/dev/null 2>&1 && [[ ! -x "${HOME}/.local/bin/librepods-ctl" ]]; then
+  echo "librepods-ctl is not on PATH (needed for AirPods/Beats)."
+fi
+
+chmod +x "$root/bridge.py" "$root/find.sh"
+install -Dm644 "$root/systemd/ddewolfe-better-omapods.service" \
+  "${HOME}/.config/systemd/user/ddewolfe-better-omapods.service"
+
+# Older id used a different unit and state directory.
+systemctl --user disable --now ddewolfe-soundcore.service 2>/dev/null || true
+systemctl --user disable --now soundcore-bridge.service 2>/dev/null || true
+rm -f "${HOME}/.config/systemd/user/ddewolfe-soundcore.service"
+
+old_state="${XDG_STATE_HOME:-$HOME/.local/state}/soundcore"
+new_state="${XDG_STATE_HOME:-$HOME/.local/state}/better-omapods"
+if [[ -f $old_state/status.json && ! -f $new_state/status.json ]]; then
+  mkdir -p "$new_state"
+  cp -a "$old_state/status.json" "$new_state/status.json"
+fi
+
+systemctl --user daemon-reload
+systemctl --user enable --now ddewolfe-better-omapods.service
+echo "Better Omapods bridge is running."

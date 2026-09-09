@@ -12,6 +12,12 @@ var LID_UNKNOWN = 2
 
 var GLYPH_CHECK = "\uDB80\uDD2C"
 var MAX_ERROR_CHARS = 140
+var MAX_STATUS_CHARS = 32768
+var MAX_NAME_CHARS = 80
+var MAX_ID_CHARS = 64
+var MAX_LABEL_CHARS = 80
+var MAX_TOUCH_CONTROLS = 16
+var MAX_TOUCH_OPTIONS = 32
 
 function defaultPod() {
   return { level: LEVEL_UNKNOWN, charging: false, inEar: false, inCase: false }
@@ -65,6 +71,12 @@ function intOr(value, fallback) {
   return isFinite(n) ? n : fallback
 }
 
+function clip(value, limit) {
+  var text = String(value == null ? "" : value)
+  if (text.length <= limit) return text
+  return text.slice(0, limit)
+}
+
 function podFrom(raw) {
   var pod = defaultPod()
   if (!raw || typeof raw !== "object") return pod
@@ -81,6 +93,10 @@ function parseStatus(raw) {
   var text = String(raw || "").trim()
   if (text === "") {
     status.lastError = "The Soundcore status file is empty"
+    return status
+  }
+  if (text.length > MAX_STATUS_CHARS) {
+    status.lastError = "The Soundcore status file is too large"
     return status
   }
   var parsed
@@ -100,12 +116,12 @@ function parseStatus(raw) {
   }
   status.ok = true
   status.connected = parsed.connected === true
-  status.deviceName = String(parsed.device_name || "")
-  status.modelName = String(parsed.model_name || "")
-  status.modelId = String(parsed.model_id || "")
+  status.deviceName = clip(parsed.device_name || "", MAX_NAME_CHARS)
+  status.modelName = clip(parsed.model_name || "", MAX_NAME_CHARS)
+  status.modelId = clip(parsed.model_id || "", MAX_ID_CHARS)
   status.isHeadset = parsed.is_headset === true
   status.isProSeries = parsed.is_pro_series === true
-  status.backend = String(parsed.backend || "")
+  status.backend = clip(parsed.backend || "", MAX_ID_CHARS)
   status.supportsNoiseOff = parsed.supports_noise_off === true
   status.supportsNoiseControl = parsed.supports_noise_control === true
   status.supportsAdaptive = parsed.supports_adaptive === true
@@ -148,25 +164,27 @@ function parseTouch(raw) {
   out.tone = raw.tone === true
   var list = raw.controls
   if (!list || typeof list.length !== "number") return out
-  for (var i = 0; i < list.length; i++) {
+  var count = Math.min(list.length, MAX_TOUCH_CONTROLS)
+  for (var i = 0; i < count; i++) {
     var row = list[i]
     if (!row || !row.id) continue
     var options = []
     var rawOpts = row.options
     if (rawOpts && rawOpts.length) {
-      for (var j = 0; j < rawOpts.length; j++) {
+      var optCount = Math.min(rawOpts.length, MAX_TOUCH_OPTIONS)
+      for (var j = 0; j < optCount; j++) {
         var opt = rawOpts[j]
         if (!opt) continue
         options.push({
-          id: opt.id == null ? "" : String(opt.id),
-          label: String(opt.label || opt.id || "Off")
+          id: clip(opt.id == null ? "" : opt.id, MAX_ID_CHARS),
+          label: clip(opt.label || opt.id || "Off", MAX_LABEL_CHARS)
         })
       }
     }
     out.controls.push({
-      id: String(row.id),
-      label: String(row.label || row.id),
-      value: row.value == null ? "" : String(row.value),
+      id: clip(row.id, MAX_ID_CHARS),
+      label: clip(row.label || row.id, MAX_LABEL_CHARS),
+      value: clip(row.value == null ? "" : row.value, MAX_ID_CHARS),
       options: options
     })
   }

@@ -83,6 +83,17 @@ check("touch cycles forward", Model.nextTouchValue(touch.controls[0], 1), "PlayP
 check("touch cycles from last to off", Model.nextTouchValue({ value: "PlayPause", options: touch.controls[0].options }, 1), "")
 check("unset press is Off", Model.touchValueLabel({ value: "", options: touch.controls[0].options }), "Off")
 
+const huge = "x".repeat(40000)
+check("oversized status is rejected", Model.parseStatus('{"schema_version":1,"device_name":"' + huge + '"}').ok, false)
+
+const longName = Model.parseStatus('{"schema_version":1,"connected":true,"device_name":"' + "n".repeat(200) + '"}')
+check("device names are capped", longName.deviceName.length, 80)
+
+const many = []
+for (let i = 0; i < 40; i++) many.push({ id: "c" + i, label: "L" + i, value: "", options: [{ id: "a", label: "A" }] })
+const cappedTouch = Model.parseTouch({ available: true, controls: many })
+check("touch controls are capped", cappedTouch.controls.length, 16)
+
 if (failures) {
   console.log(failures + " failed")
   Deno.exit(1)

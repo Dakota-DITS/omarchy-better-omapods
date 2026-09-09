@@ -66,6 +66,7 @@ Item {
   property var _pendingValue: null
   property var _queued: null
   property string _queuedFind: ""
+  property bool _statusReload: false
 
   function setting(name, fallback) {
     var value = settings ? settings[name] : undefined
@@ -73,7 +74,12 @@ Item {
   }
 
   function refresh() {
-    stateFile.reload()
+    if (statusProcess.running) {
+      _statusReload = true
+      return
+    }
+    statusProcess.command = ["python3", bridge, "read-status"]
+    statusProcess.running = true
   }
 
   function applyLine(raw) {
@@ -280,9 +286,24 @@ Item {
     path: root.statePath
     watchChanges: true
     printErrors: false
-    onFileChanged: reload()
-    onLoaded: root.applyLine(text())
+    onFileChanged: root.refresh()
+    onLoaded: root.refresh()
     onLoadFailed: root.stateGone()
+  }
+
+  Process {
+    id: statusProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: statusOut; waitForEnd: true }
+    onExited: function (exitCode) {
+      if (exitCode === 0) root.applyLine(statusOut.text)
+      else root.stateGone()
+      if (root._statusReload) {
+        root._statusReload = false
+        root.refresh()
+      }
+    }
   }
 
   Process {

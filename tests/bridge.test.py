@@ -113,6 +113,35 @@ class FindTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0)
 
+    def test_refuses_shared_tmp(self):
+        env = dict(**{k: v for k, v in __import__("os").environ.items() if k != "XDG_RUNTIME_DIR"})
+        env["XDG_RUNTIME_DIR"] = "/tmp"
+        proc = subprocess.run(
+            ["bash", str(ROOT / "find.sh"), "stop"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        err = (proc.stderr + proc.stdout).lower()
+        self.assertTrue("private" in err or "symlink" in err or "owner" in err)
+
+
+class StatusReadTests(unittest.TestCase):
+    def test_read_status_missing(self):
+        proc = subprocess.run(
+            ["python3", str(ROOT / "bridge.py"), "read-status"],
+            capture_output=True,
+            text=True,
+            env={**__import__("os").environ, "XDG_STATE_HOME": "/tmp/better-omapods-missing-state"},
+        )
+        self.assertNotEqual(proc.returncode, 0)
+
+    def test_run_bounds_timeout_output(self):
+        proc = bridge.run(["python3", "-c", "print('ok')"], timeout=5)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout.strip(), "ok")
+
 
 if __name__ == "__main__":
     unittest.main()

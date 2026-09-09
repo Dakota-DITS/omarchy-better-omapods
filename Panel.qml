@@ -253,6 +253,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: device.actionStatus !== "" || (device.lastError !== "" && device.daemonReachable)
             width: parent.width
             text: device.actionStatus !== "" ? device.actionStatus : device.lastError
@@ -311,6 +312,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: device.finding
                 ? "Playing a locating tone. Click the row again to stop."
@@ -394,6 +396,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               width: parent.width
               text: "Click a row or use h / l to cycle the action."
               color: root.dim
@@ -426,6 +429,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: !device.hasDevice && !device.hasBattery
             width: parent.width
             text: "Connect AirPods, Soundcore, or other Bluetooth headphones. Soundcore and AirPods get listening modes. Other pairs get battery when BlueZ reports it, plus Find."
@@ -473,6 +477,7 @@ Panel {
       spacing: Style.space(8)
 
       Text {
+        textFormat: Text.PlainText
         text: podRow.label
         color: root.foreground
         opacity: 0.6
@@ -498,6 +503,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: Model.levelText(podRow.pod ? podRow.pod.level : Model.LEVEL_UNKNOWN)
         color: root.foreground
         font.family: root.fontFamily
@@ -507,6 +513,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: podRow.metaText
         color: root.dim
         font.family: root.fontFamily
@@ -531,6 +538,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.left: parent.left
       anchors.leftMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -541,6 +549,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       visible: selected
       anchors.right: parent.right
       anchors.rightMargin: Style.space(8)
@@ -573,6 +582,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.left: parent.left
       anchors.leftMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -583,6 +593,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       visible: selected
       anchors.right: parent.right
       anchors.rightMargin: Style.space(8)
@@ -625,6 +636,7 @@ Panel {
         spacing: Style.space(8)
 
         Text {
+          textFormat: Text.PlainText
           text: "ANC strength"
           color: root.foreground
           opacity: 0.6
@@ -638,6 +650,7 @@ Panel {
         }
 
         Text {
+          textFormat: Text.PlainText
           text: device.manualAnc === Model.LEVEL_UNKNOWN
             ? "--"
             : device.manualAnc + " / " + device.manualAncMax
@@ -684,6 +697,7 @@ Panel {
         width: parent.width
         spacing: Style.space(8)
         Text {
+          textFormat: Text.PlainText
           text: "Adaptive noise"
           color: root.foreground
           opacity: 0.6
@@ -695,6 +709,7 @@ Panel {
           height: 1
         }
         Text {
+          textFormat: Text.PlainText
           text: device.adaptiveNoiseLevel + "%"
           color: root.foreground
           font.family: root.fontFamily
@@ -729,6 +744,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.left: parent.left
       anchors.leftMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -739,6 +755,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.right: parent.right
       anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -767,6 +784,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.left: parent.left
       anchors.leftMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -777,6 +795,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.right: parent.right
       anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -808,6 +827,7 @@ Panel {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.left: parent.left
       anchors.leftMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter

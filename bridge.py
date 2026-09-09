@@ -13,8 +13,11 @@ import fcntl
 import json
 import os
 import re
+import signal
+import stat
 import subprocess
 import sys
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -34,6 +37,8 @@ STATE_PATH = STATE_DIR / "status.json"
 LOCK_PATH = STATE_DIR / "openscq30.lock"
 POLL_CONNECTED = 3
 POLL_IDLE = 5
+MAX_CAPTURE = 256 * 1024
+MAX_STATUS_BYTES = 64 * 1024
 
 NOISE_OFF = 0
 NOISE_ANC = 1
@@ -86,22 +91,69 @@ TOUCH_LABELS = {
 }
 
 
+def _drain(pipe, limit, chunks, total):
+    while True:
+        data = pipe.read(8192)
+        if not data:
+            break
+        if total[0] < limit:
+            chunks.append(data[: limit - total[0]])
+        total[0] += len(data)
+
+
+def _decode(chunks):
+    return b"".join(chunks).decode("utf-8", "replace")
+
+
+def _kill_group(proc, sig):
+    try:
+        os.killpg(proc.pid, sig)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.send_signal(sig)
+        except (ProcessLookupError, OSError):
+            pass
+
+
 def run(cmd, timeout=25):
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
     except FileNotFoundError as exc:
         return subprocess.CompletedProcess(cmd, 1, "", str(exc))
+    out_chunks, err_chunks = [], []
+    out_n, err_n = [0], [0]
+    t_out = threading.Thread(target=_drain, args=(proc.stdout, MAX_CAPTURE, out_chunks, out_n), daemon=True)
+    t_err = threading.Thread(target=_drain, args=(proc.stderr, MAX_CAPTURE, err_chunks, err_n), daemon=True)
+    t_out.start()
+    t_err.start()
+    timed_out = False
     try:
-        out, err = proc.communicate(timeout=timeout)
-        return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+        proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        proc.terminate()
+        timed_out = True
+        _kill_group(proc, signal.SIGTERM)
         try:
-            out, err = proc.communicate(timeout=2)
+            proc.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            proc.kill()
-            out, err = proc.communicate()
-        return subprocess.CompletedProcess(cmd, 1, out or "", (err or "") + "timeout")
+            _kill_group(proc, signal.SIGKILL)
+            proc.wait()
+    t_out.join(1)
+    t_err.join(1)
+    if proc.stdout:
+        proc.stdout.close()
+    if proc.stderr:
+        proc.stderr.close()
+    out = _decode(out_chunks)
+    err = _decode(err_chunks)
+    if timed_out:
+        err = (err + "timeout").strip()
+        return subprocess.CompletedProcess(cmd, 1, out, err)
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
 @contextmanager
@@ -366,9 +418,9 @@ def status_from_librepods(target):
             "connected": True,
             "backend": "librepods",
             "mac": target.get("mac") or "",
-            "device_name": raw.get("device_name") or target.get("bt_name") or "",
-            "model_name": raw.get("model_name") or "",
-            "model_id": str(raw.get("model_number") or ""),
+            "device_name": _clip(raw.get("device_name") or target.get("bt_name") or "", 80),
+            "model_name": _clip(raw.get("model_name") or "", 80),
+            "model_id": _clip(raw.get("model_number") or "", 64),
             "is_headset": is_headset,
             "is_pro_series": raw.get("is_pro_series") is True,
             "supports_noise_off": raw.get("supports_noise_off") is not False,
@@ -408,8 +460,8 @@ def status_from_bluez(target):
             "connected": True,
             "backend": "bluez",
             "mac": target.get("mac") or "",
-            "device_name": name,
-            "model_name": name,
+            "device_name": _clip(name, 80),
+            "model_name": _clip(name, 80),
             "is_headset": True,
             "supports_noise_control": False,
             "headset": pod(level, False) if level >= 0 else pod(-1, False),
@@ -501,15 +553,20 @@ def humanize_id(value):
     return text.replace("_", " ").strip() or "Off"
 
 
+def _clip(value, limit):
+    text = str(value or "")
+    return text if len(text) <= limit else text[:limit]
+
+
 def touch_options(setting_ids, setting_id):
     spec = setting_ids.get(setting_id) or {}
     setting = spec.get("setting") or {}
-    options = [str(item) for item in (setting.get("options") or [])]
-    labels = [str(item) for item in (setting.get("localizedOptions") or [])]
+    options = [str(item) for item in (setting.get("options") or [])][:32]
+    labels = [str(item) for item in (setting.get("localizedOptions") or [])][:32]
     rows = [{"id": "", "label": "Off"}]
     for i, oid in enumerate(options):
         label = labels[i] if i < len(labels) and labels[i] else humanize_id(oid)
-        rows.append({"id": oid, "label": label})
+        rows.append({"id": _clip(oid, 64), "label": _clip(label, 80)})
     return rows
 
 
@@ -522,9 +579,9 @@ def touch_payload(setting_ids, settings, caps):
         value = "" if raw is None else str(raw)
         controls.append(
             {
-                "id": sid,
-                "label": TOUCH_LABELS.get(sid, humanize_id(sid)),
-                "value": value,
+                "id": _clip(sid, 64),
+                "label": _clip(TOUCH_LABELS.get(sid, humanize_id(sid)), 80),
+                "value": _clip(value, 64),
                 "options": touch_options(setting_ids, sid),
             }
         )
@@ -705,9 +762,9 @@ def connected_status(chosen, settings, caps, in_case, setting_ids=None):
     status = {
         "schema_version": 1,
         "connected": True,
-        "device_name": chosen.get("bt_name") or chosen["name"],
-        "model_name": chosen["name"],
-        "model_id": chosen["id"],
+        "device_name": _clip(chosen.get("bt_name") or chosen["name"], 80),
+        "model_name": _clip(chosen["name"], 80),
+        "model_id": _clip(chosen["id"], 64),
         "backend": "openscq30",
         "mac": chosen["mac"],
         "is_headset": is_headset,
@@ -733,17 +790,60 @@ def connected_status(chosen, settings, caps, in_case, setting_ids=None):
     return status, in_case
 
 
+def write_owned_file(path, data, max_bytes=MAX_STATUS_BYTES):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = data if isinstance(data, bytes) else data.encode("utf-8")
+    if len(encoded) > max_bytes:
+        encoded = encoded[:max_bytes]
+    flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_TRUNC
+    fd = os.open(path, flags, 0o600)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+            raise OSError("refusing to write status file")
+        os.write(fd, encoded)
+        os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
+
+
+def read_owned_file(path, max_bytes=MAX_STATUS_BYTES):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError("status is not a regular file")
+        if st.st_uid != os.getuid():
+            raise OSError("status file has unexpected owner")
+        if st.st_size > max_bytes:
+            raise OSError("status file is too large")
+        data = os.read(fd, max_bytes + 1)
+        if len(data) > max_bytes:
+            raise OSError("status file is too large")
+        return data.decode("utf-8", "strict")
+    finally:
+        os.close(fd)
+
+
 def write_status(payload):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_PATH.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(payload, separators=(",", ":")) + "\n")
-    tmp.replace(STATE_PATH)
+    write_owned_file(STATE_PATH, json.dumps(payload, separators=(",", ":")) + "\n")
+
+
+def cmd_read_status():
+    try:
+        sys.stdout.write(read_owned_file(STATE_PATH))
+        return 0
+    except (OSError, UnicodeDecodeError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 def load_in_case():
     try:
-        data = json.loads(STATE_PATH.read_text())
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(read_owned_file(STATE_PATH))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {"left": False, "right": False}
     left = data.get("left") or {}
     right = data.get("right") or {}
@@ -1034,6 +1134,8 @@ def main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) >= 2 and sys.argv[1] in ("read-status", "read_status"):
+        sys.exit(cmd_read_status())
     if len(sys.argv) >= 3 and sys.argv[1] == "set":
         which = sys.argv[2].strip().lower()
         if which in ("anc-level", "anc_level") and len(sys.argv) >= 4:
